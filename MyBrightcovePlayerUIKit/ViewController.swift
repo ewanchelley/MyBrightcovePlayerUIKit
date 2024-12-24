@@ -16,85 +16,110 @@ let streamURLParkour = "https://bitmovin-a.akamaihd.net/content/MI201109210084_1
 let streamURLBBC = "https://vs-hls-push-uk-live.akamaized.net/x=4/i=urn:bbc:pips:service:bbc_one_london/mobile_wifi_main_sd_abr_v2.m3u8"
 
 class ViewController: UIViewController, BCOVPlaybackControllerDelegate {
-
+    
     let sharedSDKManager = BCOVPlayerSDKManager.sharedManager()
-//    let playbackService = BCOVPlaybackService(withAccountId: kViewControllerAccountID, policyKey: kViewControllerPlaybackServicePolicyKey)
+    //    let playbackService = BCOVPlaybackService(withAccountId: kViewControllerAccountID, policyKey: kViewControllerPlaybackServicePolicyKey)
+    let sessionProvider: BCOVPlaybackSessionProvider
     let playbackController: BCOVPlaybackController
     @IBOutlet weak var videoContainerView: UIView!
-
+    
+    private var currentTime: TimeInterval = 0
+    
     required init?(coder aDecoder: NSCoder) {
-        playbackController = (sharedSDKManager.createPlaybackController())
-
+        sessionProvider = sharedSDKManager.createBasicSessionProvider(withOptions: BCOVBasicSessionProviderOptions())
+        playbackController = (sharedSDKManager.createPlaybackController(withSessionProvider: sessionProvider, viewStrategy: .none))
+        
         super.init(coder: aDecoder)
-
+        
         playbackController.analytics.account = kViewControllerAccountID // Optional
-
+        
         playbackController.delegate = self
         playbackController.isAutoAdvance = true
         playbackController.isAutoPlay = true
     }
-
-  override func viewDidLoad() {
-    super.viewDidLoad()
-    // Do any additional setup after loading the view, typically from a nib.
-
-      let controlsView = BCOVPUIBasicControlView.withVODLayout()
-      
-      let logoLayoutView1 = BCOVPUIBasicControlView.layoutViewWithControl(from: BCOVPUIViewTag.viewEmpty,
-                                                                          width: 88.0,
-                                                                          elasticity: 1.0)
-      
-      let logoImage1 = UIImage(named: "myLogo")
-      let logoImageView1 = UIImageView(image: logoImage1)
-
-      logoImageView1.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-      logoImageView1.contentMode = .scaleAspectFit
-      //logoImageView1.frame = logoLayoutView1.frame
-
-      // Add image view to our empty layout view.
-      logoLayoutView1!.addSubview(logoImageView1)
-
-      let customLayout = BCOVPUIControlLayout.init(standardControls: [], compactControls: [])
-      controlsView!.layout = customLayout
-      
+    
+    @objc func handleImageTapped(sender: UITapGestureRecognizer) {
+        Task {
+            let newTime = CMTime(value: CMTimeValue(currentTime + 10), timescale: 1)
+            print(newTime)
+            await playbackController.seek(to: newTime)
+        }
+    }
+    
+    func playbackController(_ controller: (any BCOVPlaybackController)!, playbackSession session: (any BCOVPlaybackSession)!, didProgressTo progress: TimeInterval) {
+        print(progress)
+        currentTime = progress
+    }
+    
+    override func viewDidLoad() {
+        super.viewDidLoad()
         
-      // Set up our player view. Create with a standard VOD layout.
-      guard let playerView = BCOVPUIPlayerView(playbackController: self.playbackController, options: nil, controlsView: controlsView) else {
-          return
-      }
-      
-    // Install in the container view and match its size.
-    self.videoContainerView.addSubview(playerView)
-    playerView.translatesAutoresizingMaskIntoConstraints = false
-    NSLayoutConstraint.activate([
-      playerView.topAnchor.constraint(equalTo: self.videoContainerView.topAnchor),
-      playerView.rightAnchor.constraint(equalTo: self.videoContainerView.rightAnchor),
-      playerView.leftAnchor.constraint(equalTo: self.videoContainerView.leftAnchor),
-      playerView.bottomAnchor.constraint(equalTo: self.videoContainerView.bottomAnchor)
-    ])
+        let controlsView = BCOVPUIBasicControlView.withVODLayout()!
 
-    // Associate the playerView with the playback controller.
-    playerView.playbackController = playbackController
-    requestContent()
-  }
-
+        let controls = [[createPlayPauseLayoutView(), createSeek10LayoutView(), createScrubBarLayoutView() ]]
+        let customLayout = BCOVPUIControlLayout.init(standardControls: controls, compactControls: controls)
+        controlsView.layout = customLayout
+        
+        // Set up our player view. Create with a standard VOD layout.
+        guard let playerView = BCOVPUIPlayerView(playbackController: self.playbackController, options: nil, controlsView: controlsView) else {
+            return
+        }
+        
+        // Install in the container view and match its size.
+        self.videoContainerView.addSubview(playerView)
+        playerView.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            playerView.topAnchor.constraint(equalTo: self.videoContainerView.topAnchor),
+            playerView.rightAnchor.constraint(equalTo: self.videoContainerView.rightAnchor),
+            playerView.leftAnchor.constraint(equalTo: self.videoContainerView.leftAnchor),
+            playerView.bottomAnchor.constraint(equalTo: self.videoContainerView.bottomAnchor)
+        ])
+        
+        // Associate the playerView with the playback controller.
+        playerView.playbackController = playbackController
+        requestContent()
+    }
+    
+    func createPlayPauseLayoutView() -> BCOVPUILayoutView {
+        return BCOVPUIBasicControlView.layoutViewWithControl(
+            from: BCOVPUIViewTag.buttonPlayback,
+            width: kBCOVPUILayoutUseDefaultValue,
+            elasticity: 0.0)
+    }
+    
+    func createScrubBarLayoutView() -> BCOVPUILayoutView {
+        return BCOVPUIBasicControlView.layoutViewWithControl(
+            from: BCOVPUIViewTag.sliderProgress,
+            width: kBCOVPUILayoutUseDefaultValue,
+            elasticity: 1.0)
+    }
+    
+    func createSeek10LayoutView() -> BCOVPUILayoutView {
+        let seek10LayoutView = BCOVPUIBasicControlView.layoutViewWithControl(
+            from: BCOVPUIViewTag.viewEmpty,
+            width: 88.0,
+            elasticity: 1.0
+        )!
+        
+        let seek10ImageView = UIImageView(image: UIImage(systemName: "arrow.clockwise"))
+        seek10ImageView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        seek10ImageView.contentMode = .scaleAspectFit
+        seek10ImageView.isUserInteractionEnabled = true
+        seek10ImageView.tintColor = .white
+        
+        let tapGesture = UITapGestureRecognizer(target: self, action: #selector(handleImageTapped))
+        seek10ImageView.addGestureRecognizer(tapGesture)
+        
+        // Add image view to our empty layout view.
+        seek10LayoutView.addSubview(seek10ImageView)
+        return seek10LayoutView
+    }
+    
     func requestContent() {
-        let videoURL = URL(string: streamURLBBC)
+        let videoURL = URL(string: streamURLParkour)
         let source = BCOVSource(withURL: videoURL)
         let video = BCOVVideo(withSource: source, cuePoints: .none, properties: [:])
         self.playbackController.setVideos([video])
     }
-    
-//  func requestContentFromPlaybackService() {
-//    let configuration = [BCOVPlaybackService.ConfigurationKeyAssetID:kViewControllerVideoID]
-//    playbackService.findVideo(withConfiguration: configuration, queryParameters: nil, completion: { [weak self] (video: BCOVVideo?, jsonResponse: Any?, error: Error?) in
-//
-//        if let v = video {
-//            self?.playbackController.setVideos([v])
-//        } else {
-//            print("ViewController Debug - Error retrieving video: \(error?.localizedDescription ?? "unknown error")")
-//        }
-//    })
-//  }
 }
 
