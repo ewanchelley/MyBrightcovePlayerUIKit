@@ -18,7 +18,6 @@ let streamURLBBC = "https://vs-hls-push-uk-live.akamaized.net/x=4/i=urn:bbc:pips
 class ViewController: UIViewController, BCOVPlaybackControllerDelegate {
     
     let sharedSDKManager = BCOVPlayerSDKManager.sharedManager()
-    //    let playbackService = BCOVPlaybackService(withAccountId: kViewControllerAccountID, policyKey: kViewControllerPlaybackServicePolicyKey)
     let sessionProvider: BCOVPlaybackSessionProvider
     let playbackController: BCOVPlaybackController
     @IBOutlet weak var videoContainerView: UIView!
@@ -38,30 +37,62 @@ class ViewController: UIViewController, BCOVPlaybackControllerDelegate {
         playbackController.isAutoPlay = true
     }
     
-    @objc func handleImageTapped(sender: UITapGestureRecognizer) {
+    @objc func handleJumpToStartImageTapped(sender: UITapGestureRecognizer) {
+        Task {
+            let newTime = CMTime(value: CMTimeValue(0), timescale: 1)
+            await playbackController.seek(to: newTime)
+        }
+    }
+    
+    @objc func handleBack10ImageTapped(sender: UITapGestureRecognizer) {
+        Task {
+            let newTime = CMTime(value: CMTimeValue(currentTime - 10), timescale: 1)
+            await playbackController.seek(to: newTime)
+        }
+    }
+    
+    @objc func handleForward10ImageTapped(sender: UITapGestureRecognizer) {
         Task {
             let newTime = CMTime(value: CMTimeValue(currentTime + 10), timescale: 1)
-            print(newTime)
+            await playbackController.seek(to: newTime)
+        }
+    }
+    
+    @objc func handleJumpLiveImageTapped(sender: UITapGestureRecognizer) {
+        Task {
+            let newTime = CMTime(value: CMTimeValue(5000), timescale: 1)
             await playbackController.seek(to: newTime)
         }
     }
     
     func playbackController(_ controller: (any BCOVPlaybackController)!, playbackSession session: (any BCOVPlaybackSession)!, didProgressTo progress: TimeInterval) {
-        print(progress)
+        print("Progress: \(progress)")
         currentTime = progress
     }
     
     override func viewDidLoad() {
         super.viewDidLoad()
         
-        let controlsView = BCOVPUIBasicControlView.withVODLayout()!
+        let controlsView = BCOVPUIBasicControlView.withLiveLayout()!
 
-        let controls = [[createPlayPauseLayoutView(), createSeek10LayoutView(), createScrubBarLayoutView() ]]
+        let controls = [
+            [
+                createCurrentTimeLayoutView(),
+                createScrubBarLayoutView()
+            ],
+            [
+                createJumpToStartLayoutView(),
+                createSeekBack10LayoutView(),
+                createPlayPauseLayoutView(),
+                createSeekForward10LayoutView(),
+                createJumpLiveLayoutView()
+            ]
+        ]
         let customLayout = BCOVPUIControlLayout.init(standardControls: controls, compactControls: controls)
         controlsView.layout = customLayout
         
         // Set up our player view. Create with a standard VOD layout.
-        guard let playerView = BCOVPUIPlayerView(playbackController: self.playbackController, options: nil, controlsView: controlsView) else {
+        guard let playerView = BCOVPUIPlayerView(playbackController: self.playbackController, options: nil, controlsView: .withLiveDVRLayout()) else {
             return
         }
         
@@ -80,6 +111,13 @@ class ViewController: UIViewController, BCOVPlaybackControllerDelegate {
         requestContent()
     }
     
+    func createCurrentTimeLayoutView() -> BCOVPUILayoutView {
+        return BCOVPUIBasicControlView.layoutViewWithControl(
+            from: BCOVPUIViewTag.labelCurrentTime,
+            width: kBCOVPUILayoutUseDefaultValue,
+            elasticity: 0.0)
+    }
+    
     func createPlayPauseLayoutView() -> BCOVPUILayoutView {
         return BCOVPUIBasicControlView.layoutViewWithControl(
             from: BCOVPUIViewTag.buttonPlayback,
@@ -94,31 +132,98 @@ class ViewController: UIViewController, BCOVPlaybackControllerDelegate {
             elasticity: 1.0)
     }
     
-    func createSeek10LayoutView() -> BCOVPUILayoutView {
-        let seek10LayoutView = BCOVPUIBasicControlView.layoutViewWithControl(
+    func createJumpToStartLayoutView() -> BCOVPUILayoutView {
+        let layoutView = BCOVPUIBasicControlView.layoutViewWithControl(
             from: BCOVPUIViewTag.viewEmpty,
-            width: 88.0,
+            width: kBCOVPUILayoutUseDefaultValue,
             elasticity: 1.0
         )!
         
-        let seek10ImageView = UIImageView(image: UIImage(systemName: "arrow.clockwise"))
-        seek10ImageView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-        seek10ImageView.contentMode = .scaleAspectFit
-        seek10ImageView.isUserInteractionEnabled = true
-        seek10ImageView.tintColor = .white
+        let imageView = UIImageView(image: UIImage(systemName: "backward.end.alt.fill"))
+        imageView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        imageView.contentMode = .scaleAspectFit
+        imageView.isUserInteractionEnabled = true
+        imageView.tintColor = .white
         
-        let tapGesture = UITapGestureRecognizer(target: self, action: #selector(handleImageTapped))
-        seek10ImageView.addGestureRecognizer(tapGesture)
+        let tapGesture = UITapGestureRecognizer(target: self, action: #selector(handleJumpToStartImageTapped))
+        imageView.addGestureRecognizer(tapGesture)
         
         // Add image view to our empty layout view.
-        seek10LayoutView.addSubview(seek10ImageView)
-        return seek10LayoutView
+        layoutView.addSubview(imageView)
+        return layoutView
+    }
+    
+    func createSeekBack10LayoutView() -> BCOVPUILayoutView {
+        let layoutView = BCOVPUIBasicControlView.layoutViewWithControl(
+            from: BCOVPUIViewTag.viewEmpty,
+            width: kBCOVPUILayoutUseDefaultValue,
+            elasticity: 1.0
+        )!
+        
+        let imageView = UIImageView(image: UIImage(systemName: "arrow.counterclockwise"))
+        imageView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        imageView.contentMode = .scaleAspectFit
+        imageView.isUserInteractionEnabled = true
+        imageView.tintColor = .white
+        
+        let tapGesture = UITapGestureRecognizer(target: self, action: #selector(handleBack10ImageTapped))
+        imageView.addGestureRecognizer(tapGesture)
+        
+        // Add image view to our empty layout view.
+        layoutView.addSubview(imageView)
+        return layoutView
+    }
+    
+    func createSeekForward10LayoutView() -> BCOVPUILayoutView {
+        let layoutView = BCOVPUIBasicControlView.layoutViewWithControl(
+            from: BCOVPUIViewTag.viewEmpty,
+            width: kBCOVPUILayoutUseDefaultValue,
+            elasticity: 1.0
+        )!
+        
+        let imageView = UIImageView(image: UIImage(systemName: "arrow.clockwise"))
+        imageView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        imageView.contentMode = .scaleAspectFit
+        imageView.isUserInteractionEnabled = true
+        imageView.tintColor = .white
+        
+        let tapGesture = UITapGestureRecognizer(target: self, action: #selector(handleForward10ImageTapped))
+        imageView.addGestureRecognizer(tapGesture)
+        
+        // Add image view to our empty layout view.
+        layoutView.addSubview(imageView)
+        return layoutView
+    }
+    
+    func createJumpLiveLayoutView() -> BCOVPUILayoutView {
+        let layoutView = BCOVPUIBasicControlView.layoutViewWithControl(
+            from: BCOVPUIViewTag.viewEmpty,
+            width: kBCOVPUILayoutUseDefaultValue,
+            elasticity: 1.0
+        )!
+        
+        let imageView = UIImageView(image: UIImage(systemName: "forward.end.alt.fill"))
+        imageView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        imageView.contentMode = .scaleAspectFit
+        imageView.isUserInteractionEnabled = true
+        imageView.tintColor = .white
+        
+        let tapGesture = UITapGestureRecognizer(target: self, action: #selector(handleJumpLiveImageTapped))
+        imageView.addGestureRecognizer(tapGesture)
+        
+        // Add image view to our empty layout view.
+        layoutView.addSubview(imageView)
+        return layoutView
     }
     
     func requestContent() {
-        let videoURL = URL(string: streamURLParkour)
+        let videoURL = URL(string: streamURLBBC)
         let source = BCOVSource(withURL: videoURL)
-        let video = BCOVVideo(withSource: source, cuePoints: .none, properties: [:])
+        print("Source properties: \(source.properties)")
+        let video = BCOVVideo(withSource: source, cuePoints: .none, properties: [BCOVVideo.PropertyKeyName:"BBC One"])
+        
+        let movieTitle = video.properties[BCOVVideo.PropertyKeyName] as? String ?? "<Title Unavailable>"
+        print("Properties: \(video.properties)")
         self.playbackController.setVideos([video])
     }
 }
